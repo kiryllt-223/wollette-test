@@ -7,7 +7,6 @@ import com.ratelimiter.dto.UserUsageDto;
 import com.ratelimiter.model.StatsSnapshot;
 import com.ratelimiter.model.UserUsage;
 import com.ratelimiter.service.AnalyticsService;
-import com.ratelimiter.service.RateLimiterService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,22 +19,19 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class RateLimiterController {
 
-    private final RateLimiterService rateLimiterService;
     private final AnalyticsService analyticsService;
 
     public RateLimiterController(
-            RateLimiterService rateLimiterService,
             AnalyticsService analyticsService
     ) {
-        this.rateLimiterService = rateLimiterService;
         this.analyticsService = analyticsService;
     }
 
     @PostMapping("/request")
     public ResponseEntity<RequestDecisionDto> request(@Valid @RequestBody RequestDto request) {
-        boolean allowed = rateLimiterService.allowRequest(request.userId(), request.endpoint());
-        RequestDecisionDto body = new RequestDecisionDto(allowed, request.userId(), request.endpoint());
-        return ResponseEntity.status(allowed ? 200 : 429).body(body);
+        // 429 responses are handled by the rate-limit filter before controller dispatch.
+        RequestDecisionDto body = new RequestDecisionDto(true, request.userId(), request.endpoint());
+        return ResponseEntity.ok(body);
     }
 
     @GetMapping("/stats")
