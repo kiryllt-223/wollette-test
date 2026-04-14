@@ -409,11 +409,25 @@ The failure simulations in this project target Redis availability, which is the 
 
 **Key assertion:** `rl_server_errors` stays at zero throughout all phases. The 1—5 s election window produces at most ~30 `rl_failover_errors` (transport-level, not 5xx), which the scenario threshold permits.
 
-### What remains out of scope in the HTTP path
+### Failure Mode 3: Application Node Clock Skew
 
-Clock skew is now exercised in the runtime API path via `scenarios/clock-skew.js`, which injects
-time drift directly into `app-2` by changing container OS time (`date -s`). This demonstrates the
-practical effect of client-side clock drift on Lua refill math under real HTTP traffic.
+**Simulation:** `scenarios/clock-skew.js` drives live HTTP traffic while `app-2` has its container
+OS clock shifted forward by 120 seconds (`date -s '+120 seconds'`) and then restored
+(`date -s '-120 seconds'`) during the same test window.
+
+**System behavior — three phases:**
+
+| Phase | Duration | What happens |
+| ----- | -------- | ------------ |
+| Baseline | 0—30 s | All app nodes run with normal time. Global limiting shows normal 200/429 behavior. |
+| Skewed node | 30—90 s | `app-2` sends a drifted `nowMs` into Redis Lua scripts. Without monotonic hardening, this can bias refill/window math for requests routed through that node. With monotonic hardening enabled, behavior remains consistent with peers. |
+| Restored | 90—120 s | `app-2` clock is restored. Any temporary per-node bias disappears and all nodes converge to normal shared-limit behavior. |
+
+**Key assertion:** service availability is unaffected (`rl_server_error_rate` remains near zero), and
+with monotonic limiter time (`MonotonicUtcClock`) node-level allow/reject ratios stay close even
+during OS wall-clock jumps.
+
+### What remains out of scope in the HTTP path
 
 In-memory partial-data-loss simulation (state clearing) is still benchmark-only in this repository.
 For this test task, that limited scope is acceptable. In production, both time-fault injection and
