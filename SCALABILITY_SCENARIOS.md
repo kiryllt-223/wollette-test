@@ -412,6 +412,77 @@ docker compose exec redis-node-0 redis-cli -c XINFO GROUPS rate-limit-events
 
 ---
 
+### Scenario 5: App Container Clock Skew (OS Time Drift)
+
+**What it proves:** If one app node's OS clock drifts ahead, Redis Lua token refill math
+(`nowMs - last_refill_ms`) becomes biased for requests routed through that node. The system
+remains available (no 5xx expected), but fairness across nodes degrades until time is restored.
+
+**Why this scenario is special:** This test intentionally changes container OS time using
+`date -s` inside `app-2`. To allow that in this test-task environment, `app-2` runs with
+`SYS_TIME` capability and unconfined seccomp in `docker-compose.yml`.
+
+**Run:**
+
+Open two terminals.
+
+**Terminal 1 — start load test:**
+```bash
+k6 run scenarios/clock-skew.js
+```
+
+**Terminal 2 — at ~T=30s, verify baseline then skew app-2 by +120s:**
+```bash
+docker compose exec app-2 sh -c "date -u && date -u -s '+120 seconds' && date -u"
+```
+
+**Terminal 2 — at ~T=90s, restore app-2 clock by -120s:**
+```bash
+docker compose exec app-2 sh -c "date -u && date -u -s '-120 seconds' && date -u"
+```
+
+**What happens phase by phase:**
+
+| Phase | Time | What k6 sees |
+|-------|------|--------------|
+| Phase 1 | 0–30s | Baseline behavior. Normal 200/429 mix |
+| Phase 2 | 30–90s | Node `8082` (app-2) tends to over-refill token bucket and can allow more requests than `8081`/`8083` for the same hot user |
+| Phase 3 | 90–120s | After clock restoration, per-node behavior converges back toward normal |
+
+**Expected metric pattern:**
+
+```
+rl_app2_allowed....: higher than rl_app1_allowed / rl_app3_allowed during skew window
+rl_app2_rejected...: lower than rl_app1_rejected / rl_app3_rejected during skew window
+rl_server_errors...: 0
+```
+
+**Thresholds:**
+
+```
+✓ rl_server_error_rate: rate=0.00%  < 1%
+✓ rl_rate_limited_rate: rate>20%    (limits still firing globally)
+✓ http_req_duration...: p(95)<250ms
+```
+
+**Post-check:**
+
+```bash
+docker compose exec app-2 date -u
+curl -s http://localhost:8082/actuator/health | jq .status
+```
+
+Expected:
+```json
+"UP"
+```
+
+> Production note: changing container OS time is a deliberate chaos mechanism for this test
+> task. In real production systems, use controlled time-fault injection tooling and avoid
+> running application containers with elevated time-changing privileges.
+
+---
+
 ## Part B — JMH Microbenchmarks
 
 JMH measures in-process algorithm throughput — no network, no Redis. Run these to confirm

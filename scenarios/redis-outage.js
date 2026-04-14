@@ -84,10 +84,13 @@ export default function () {
         );
         decisionLatency.add(Date.now() - start);
 
-        const isServerError = res.status >= 500 || res.error_code !== 0;
+        // k6 may set error_code for HTTP responses like 429, so use status===0
+        // to detect transport failures (no HTTP response received).
+        const isTransportError = res.status === 0;
+        const isServerError = !isTransportError && res.status >= 500;
 
         check(res, {
-            'no 5xx ever':          (r) => r.status < 500 && r.error_code === 0,
+            'no 5xx ever':          (r) => r.status < 500,
             'status is 200 or 429': (r) => r.status === 200 || r.status === 429,
         });
 

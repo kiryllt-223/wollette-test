@@ -29,7 +29,8 @@ public class RateLimiterController {
 
     @PostMapping("/request")
     public ResponseEntity<RequestDecisionDto> request(@Valid @RequestBody RequestDto request) {
-        // 429 responses are handled by the rate-limit filter before controller dispatch.
+        // 429 responses are handled by the rate-limit filter before controller dispatch. This is done
+        // as best practice for potential system expansion in the future
         RequestDecisionDto body = new RequestDecisionDto(true, request.userId(), request.endpoint());
         return ResponseEntity.ok(body);
     }

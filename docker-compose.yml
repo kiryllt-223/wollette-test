@@ -156,6 +156,12 @@ services:
     image: ${APP_IMAGE:-wollette-test-app:latest}
     ports:
       - "${APP2_PORT:-8082}:8080"
+    # Test-task only: enables Scenario 5 (clock skew) by allowing `date -s`
+    # inside this container without elevating all services.
+    cap_add:
+      - SYS_TIME
+    security_opt:
+      - seccomp:unconfined
     environment:
       SPRING_DATA_REDIS_CLUSTER_NODES: "redis-node-0:6379,redis-node-1:6379,redis-node-2:6379,redis-node-3:6379,redis-node-4:6379,redis-node-5:6379"
       RATE_LIMITER_STREAM_GROUP: ${RATE_LIMITER_STREAM_GROUP:-analytics}

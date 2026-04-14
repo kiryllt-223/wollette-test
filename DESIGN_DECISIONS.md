@@ -409,9 +409,16 @@ The failure simulations in this project target Redis availability, which is the 
 
 **Key assertion:** `rl_server_errors` stays at zero throughout all phases. The 1—5 s election window produces at most ~30 `rl_failover_errors` (transport-level, not 5xx), which the scenario threshold permits.
 
-### What is not simulated in the HTTP path
+### What remains out of scope in the HTTP path
 
-Clock-skew and in-memory partial-data-loss simulations (`RateLimiterNode.setClockOffsetMs()`, state clearing) exist in the codebase but are exercised by JMH benchmarks rather than the runtime API decision path. For this test task that scope is sufficient; in a production deployment these would be covered by chaos engineering tooling (for example Chaos Mesh or Gremlin).
+Clock skew is now exercised in the runtime API path via `scenarios/clock-skew.js`, which injects
+time drift directly into `app-2` by changing container OS time (`date -s`). This demonstrates the
+practical effect of client-side clock drift on Lua refill math under real HTTP traffic.
+
+In-memory partial-data-loss simulation (state clearing) is still benchmark-only in this repository.
+For this test task, that limited scope is acceptable. In production, both time-fault injection and
+partial state corruption testing should use controlled chaos tooling, strict blast-radius controls,
+and non-privileged runtime defaults.
 
 ---
 
