@@ -1,5 +1,37 @@
 # Rate Limiter + Analytics Service — Design Decisions & Trade-offs
 
+```mermaid
+flowchart TB
+  subgraph ext["External"]
+    C["API clients / load tests"]
+  end
+
+  subgraph jvm["Spring Boot"]
+    F["RateLimitEnforcementFilter"]
+    API["REST controllers"]
+    SVC["Services — tier rules + algorithms"]
+    REP["Repository — Redis Lua (EVALSHA)"]
+    PUB["Event publisher"]
+    CON["Stream consumer — analytics aggregation"]
+  end
+
+  subgraph redis["Redis — standalone or cluster"]
+    RL[("Rate limit state (token bucket / sliding window)")]
+    STR[["Redis Stream rate-limit-events"]]
+    AGG[("Analytics counters & rankings")]
+  end
+
+  C --> F
+  F --> API
+  API --> SVC
+  SVC --> REP
+  REP <-->|"atomic check-and-update"| RL
+  SVC --> PUB
+  PUB -->|"XADD"| STR
+  CON -->|"XREADGROUP"| STR
+  CON --> AGG
+```
+
 This document covers every requirement from the task specification and explains the chosen approach, the alternatives that were considered, and the trade-offs involved in each decision. It is intended as a reference for technical review.
 
 ---
